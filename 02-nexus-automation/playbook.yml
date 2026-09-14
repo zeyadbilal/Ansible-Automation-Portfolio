@@ -1,0 +1,116 @@
+- name: install Nexus Repository Manager 3
+  hosts: containers
+  tasks:
+
+  - name: Install Java OpenJDK 11
+    apt:
+      name: openjdk-11-jdk
+      state: present
+      update_cache: yes
+
+  - name: Download Nexus Repository Manager 3
+    get_url:
+      url: "https://download.sonatype.com/nexus/3/nexus-3.68.0-04-unix.tar.gz"
+      dest: /opt/nexus-latest.tar.gz
+      mode: '0755'
+
+  - name: Extract Nexus Repository Manager 3
+    unarchive:
+      src: /opt/nexus-latest.tar.gz
+      dest: /opt/
+      remote_src: yes
+      creates: /opt/nexus-3.*
+
+  - name: rename nexus directory
+    shell: mv /opt/nexus-3.* /opt/nexus
+    args:
+      creates: /opt/nexus
+
+  - name: Create nexus group
+    ansible.builtin.group:
+      name: nexus
+      state: present
+      system: yes
+
+  - name: Create nexus user
+    user:
+      name: nexus
+      group: nexus
+      shell: /bin/bash
+      create_home: no
+      system: yes
+
+  - name: set no password for nexus user
+    lineinfile:
+      path: /etc/sudoers
+      regexp: '^nexus'
+      line: 'nexus ALL=(ALL) NOPASSWD: ALL'
+      validate: 'visudo -cf %s'
+
+  - name: Change ownership of sonatype-work files
+    file:
+      path: /opt/sonatype-work
+      state: directory
+      owner: nexus
+      group: nexus
+      recurse: yes
+
+  - name: Change ownership of Nexus files
+    file:
+      path: /opt/nexus
+      state: directory
+      owner: nexus
+      group: nexus
+      recurse: yes
+
+  - name: Configure nexus.rc to run as nexus user
+    lineinfile:
+      path: /opt/nexus/bin/nexus.rc
+      regexp: '^#run_as_user='
+      line: 'run_as_user=nexus'
+      state: present
+      create: yes
+
+  - name: To Increase the nexus JVM heap size
+    lineinfile:
+      path: /opt/nexus/bin/nexus.vmoptions
+      regexp: '^-XX:MaxDirectMemorySize='
+      line: '-XX:MaxDirectMemorySize=2703m'
+      state: present
+
+  - name: Ensure IPv4 stack preference is set
+    lineinfile:
+      path: /opt/nexus/bin/nexus.vmoptions
+      regexp: '^-Djava.net.preferIPv4Stack='
+      line: '-Djava.net.preferIPv4Stack=true'
+      state: present
+
+  - name: Configure Nexus to run on port 8081
+    lineinfile:
+      path: /opt/nexus/etc/nexus-default.properties
+      regexp: 'application-port'
+      line: 'application-port=8081'
+      state: present
+
+  - name: run nexus as service using Systemd
+    template:
+      src: nexus.service.j2
+      dest: /etc/systemd/system/nexus.service
+      mode: '0644'
+    notify:
+    - Reload systemd to apply new service
+    - Enable and start nexus service
+
+  handlers:
+  - name: Reload systemd to apply new service
+    ansible.builtin.command: /opt/nexus/bin/nexus start
+    become: true
+    become_user: nexus
+    args:
+      creates: /opt/nexus/nexus-data/logs/nexus.log
+
+  - name: Enable and start nexus service
+    systemd:
+      name: nexus
+      enabled: yes
+      state: restarted

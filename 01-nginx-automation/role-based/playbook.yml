@@ -1,0 +1,4 @@
+- name: Deploy Nginx using Ansible with Roles
+  hosts: webservers
+  roles:
+    - role1

@@ -1,0 +1,34 @@
+- name: Deploy Nginx using Ansible with Roles
+  hosts: webservers
+  vars:
+    nginx_port: 80
+    page_folder: the_page
+    web_page:
+    - index.html
+    - styles.css
+  tasks:
+
+  - name: install nginx
+    apt:
+      name: nginx
+      state: present
+      update_cache: yes
+
+  - name: copy nginx config file
+    template:
+      src: nginx.conf.j2
+      dest: /etc/nginx/nginx.conf
+    notify: restart nginx
+
+  - name: copy the web page
+    template:
+      src: '{{ page_folder }}/{{ item }}.j2'
+      dest: /var/www/html/{{ item }}
+    loop: "{{ web_page }}"
+    notify: restart nginx
+
+  handlers:
+  - name: restart nginx
+    service:
+      name: nginx
+      state: restarted

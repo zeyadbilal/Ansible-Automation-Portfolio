@@ -1,0 +1,5 @@
+nginx_port: 8080
+page_folder: "{{ role_path }}/templates"
+web_page:
+- index.html
+- styles.css
